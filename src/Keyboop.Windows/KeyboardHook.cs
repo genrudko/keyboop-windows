@@ -211,15 +211,12 @@ internal sealed class KeyboardHook : IDisposable
     }
 
     private static bool Down(uint vk)=>(GetAsyncKeyState((int)vk)&0x8000)!=0;
-    private static string GetChars(uint vk,uint scan,IntPtr active)
+    private static string GetChars(uint vk, uint scan, IntPtr active)
     {
-        var thread=GetWindowThreadProcessId(active,out _);
-        var layout=GetKeyboardLayout(thread);
-        var keys=new byte[256];
-        if(!GetKeyboardState(keys))return "";
-        var str=new StringBuilder(8);
-        int n=ToUnicodeEx(vk,scan,keys,str,str.Capacity,4,layout);
-        return n>0?str.ToString(0,Math.Min(n,str.Length)):"";
+        uint thread=GetWindowThreadProcessId(active,out _);
+        ushort lang=(ushort)(GetKeyboardLayout(thread).ToInt64() & 0x03FF);
+        bool shift=Down(VK_SHIFT), caps=(GetKeyState(0x14)&1)!=0;
+        return PhysicalKeyMapper.TryMapLetter(vk,lang,shift,caps,out char ch)?ch.ToString():"";
     }
     private static int Replace(int deleteCount,string text)
     {
@@ -262,12 +259,9 @@ internal sealed class KeyboardHook : IDisposable
     [DllImport("user32.dll")]private static extern IntPtr CallNextHookEx(IntPtr hhk,int nCode,IntPtr wParam,IntPtr lParam);
     [DllImport("user32.dll")]private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")]private static extern short GetAsyncKeyState(int vKey);
-    [DllImport("user32.dll")]private static extern bool GetKeyboardState([Out]byte[] lpKeyState);
+    [DllImport("user32.dll")]private static extern short GetKeyState(int virtualKey);
     [DllImport("user32.dll")]private static extern uint GetWindowThreadProcessId(IntPtr hWnd,out uint pid);
     [DllImport("user32.dll")]private static extern IntPtr GetKeyboardLayout(uint idThread);
-    [DllImport("user32.dll",CharSet=CharSet.Unicode)]
-    private static extern int ToUnicodeEx(uint wVirtKey,uint wScanCode,byte[] lpKeyState,
-        StringBuilder pwszBuff,int cchBuff,uint wFlags,IntPtr dwhkl);
     [DllImport("user32.dll",SetLastError=true)]
     private static extern uint SendInput(uint cInputs,[In]Input[] pInputs,int cbSize);
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode)]
