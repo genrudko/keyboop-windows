@@ -170,7 +170,7 @@ internal sealed class KeyboardHook : IDisposable
             if(_word.Length<80){_word.Append(chars);CapturedLetters++;}
             else Reset();
         }
-        else if(chars.Length>0)Reset();
+        else Reset(); // Space, punctuation, digits and unsupported layouts end the word.
         return Next(nCode,wParam,lParam);
     }
 
