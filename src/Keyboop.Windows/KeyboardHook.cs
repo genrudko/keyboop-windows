@@ -24,6 +24,11 @@ internal sealed class KeyboardHook : IDisposable
     private IntPtr _mouseHook;
     private IntPtr _window;
     private bool _allowed;
+    public int CapturedLetters { get; private set; }
+    public int HotkeyRequests { get; private set; }
+    public int CompletedCorrections { get; private set; }
+    public int BufferedLetters => _word.Length;
+    public string LastTarget { get; private set; } = "не определено";
     private bool _swallowedSpace;
     private readonly StringBuilder _word = new(128);
     private string _pendingWord = "";
@@ -121,19 +126,12 @@ internal sealed class KeyboardHook : IDisposable
             Reset();
             _window=active;
             _allowed=IsTestWindow(active);
+            LastTarget=_allowed?"Разрешённое окно":"Вне тестового режима";
         }
         if(!_allowed)return Next(nCode,wParam,lParam);
         bool ctrl=Down(VK_CONTROL), alt=Down(VK_MENU);
-        if(ev.vkCode==VK_SPACE && ctrl && alt && !Down(VK_LWIN) && !Down(VK_RWIN))
-        {
-            _swallowedSpace=true;
-            _pendingWord=_word.ToString();
-            _pendingWindow=active;
-            _pendingSince=DateTime.UtcNow;
-            _word.Clear();
-            if(_pendingWord.Length>0) _delay.Start();
-            return (IntPtr)1;
-        }
+        // WM_HOTKEY is delivered separately by RegisterHotKey.
+        if(ev.vkCode==VK_SPACE && ctrl && alt)return Next(nCode,wParam,lParam);
 
         // Modifier key-down events do not clear the last word; we need it on the hotkey.
         if(ev.vkCode is VK_CONTROL or VK_MENU or VK_SHIFT or VK_LWIN or VK_RWIN)
@@ -159,11 +157,34 @@ internal sealed class KeyboardHook : IDisposable
         if(chars.Length==1 && (chars[0] is >= 'a' and <= 'z' or >= 'A' and <= 'Z'
                     or >= 'а' and <= 'я' or >= 'А' and <= 'Я' or 'ё' or 'Ё'))
         {
-            if(_word.Length<80)_word.Append(chars);
+            if(_word.Length<80){_word.Append(chars);CapturedLetters++;}
             else Reset();
         }
         else if(chars.Length>0)Reset();
         return Next(nCode,wParam,lParam);
+    }
+
+    public void RequestCorrection()
+    {
+        HotkeyRequests++;
+        var active=GetForegroundWindow();
+        if(_keyHook==IntPtr.Zero || active==IntPtr.Zero || active!=_window || !IsTestWindow(active))
+        {
+            Reset();
+            Notify("Хоткей получен, но окно ввода не совпадает с отслеживаемым");
+            return;
+        }
+        if(_word.Length==0)
+        {
+            Notify("Хоткей получен, но буфер пуст: сравни счётчик букв");
+            return;
+        }
+        _pendingWord=_word.ToString();
+        _pendingWindow=active;
+        _pendingSince=DateTime.UtcNow;
+        _word.Clear();
+        _delay.Start();
+        Notify("Хоткей получен: ожидаю отпускания клавиш");
     }
 
     private void OnDelayedReplacement(object? sender, EventArgs e)
@@ -172,7 +193,7 @@ internal sealed class KeyboardHook : IDisposable
         if((DateTime.UtcNow-_pendingSince)>TimeSpan.FromSeconds(2)){Reset();Notify("Отменено: хоткей удерживался слишком долго");return;}
         // Never type while Ctrl/Alt is still held: Backspace would become a shortcut.
         if(Down(VK_CONTROL)||Down(VK_MENU)||Down(VK_LWIN)||Down(VK_RWIN)
-            ||Down(VK_SHIFT)||_swallowedSpace) return;
+            ||Down(VK_SHIFT)) return;
         _delay.Stop();
         var text=_pendingWord;
         var window=_pendingWindow;
@@ -188,7 +209,8 @@ internal sealed class KeyboardHook : IDisposable
         try
         {
             int sent=Replace(text.Length,converted);
-            Notify($"Исправлено: {text} → {converted} ({sent} событий)");
+            CompletedCorrections++;
+            Notify($"Замена отправлена ({text.Length} букв / {sent} событий). Проверь результат.");
         }
         catch(Exception ex)
         {
