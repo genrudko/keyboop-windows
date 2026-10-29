@@ -27,8 +27,9 @@ public static class LayoutConverter
             if(ch is >= 'a' and <= 'z' or >= 'A' and <= 'Z') lat++;
             if(ch is >= 'а' and <= 'я' or >= 'А' and <= 'Я' or 'ё' or 'Ё') ru++;
         }
-        if(lat==ru) return input; // mixed/ambiguous: do nothing
-        var map=lat>ru?LatToRu:RuToLat;
+        // Never mutate mixed-script or nonalphabetic input: ambiguity is unsafe.
+        if(lat==0 && ru==0 || lat>0 && ru>0) return input;
+        var map=lat>0?LatToRu:RuToLat;
         var result = new StringBuilder(input.Length);
         foreach(var ch in input)
         {
