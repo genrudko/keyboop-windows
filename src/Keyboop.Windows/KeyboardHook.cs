@@ -131,7 +131,17 @@ internal sealed class KeyboardHook : IDisposable
         if(!_allowed)return Next(nCode,wParam,lParam);
         bool ctrl=Down(VK_CONTROL), alt=Down(VK_MENU);
         // WM_HOTKEY is delivered separately by RegisterHotKey.
-        if(ev.vkCode==VK_SPACE && ctrl && alt)return Next(nCode,wParam,lParam);
+        if(ev.vkCode==VK_SPACE && ctrl && alt && !Down(VK_LWIN) && !Down(VK_RWIN))
+        {
+            _swallowedSpace=true;
+            _pendingWord=_word.ToString();
+            _pendingWindow=active;
+            _pendingSince=DateTime.UtcNow;
+            _word.Clear();
+            if(_pendingWord.Length>0) _delay.Start();
+            else Notify("Хоткей получен, но буфер слова пуст");
+            return (IntPtr)1;
+        }
 
         // Modifier key-down events do not clear the last word; we need it on the hotkey.
         if(ev.vkCode is VK_CONTROL or VK_MENU or VK_SHIFT or VK_LWIN or VK_RWIN)
