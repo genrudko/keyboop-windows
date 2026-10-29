@@ -1,38 +1,55 @@
 # Keyboop for Windows
 
-Experimental, independent Windows port of [Keyboop](https://github.com/iffuno/keyboop) by Ivan Smetanin. Original project is MIT licensed; this is not an official release.
+Experimental, independent Windows port of [Keyboop](https://github.com/iffuno/keyboop) by Ivan Smetanin. Original project is MIT-licensed; this is not an official release.
 
-## First prototype
+## Status: first prototype
 
-- C# / .NET 10 WPF application for Windows 10/11.
-- **Manual-only** hotkey: Ctrl + Alt + Space converts the last **unfinished word** typed in the active window between standard Russian ЙЦУКЕН and English QWERTY layouts.
-- Win32 `WH_KEYBOARD_LL` + `SendInput` with Unicode input; **does not modify the clipboard**.
-- No persistence of typed characters. Short volatile buffer is cleared on focus change and common editing actions.
-- No automatic correction, selection conversion, password field detection or elevated-app support yet.
-- No voice transcription in this prototype.
-- Editable design source on OpenPencil VPS: `keyboop-windows-settings-v1.fig` (draft, visual QA pending).
+- C# / .NET 10 WPF Windows app.
+- **Manual-only** hotkey `Ctrl+Alt+Space` converts the most recent unfinished word between standard ЙЦУКЕН and QWERTY layouts.
+- Win32 `WH_KEYBOARD_LL` + `SendInput` with Unicode events. No clipboard mutation.
+- Short **volatile** character buffer; no keystroke data is saved to disk.
+- Automatic correction, password-field protection, selection correction, IME, voice, and compatibility testing are **not implemented**. This is not ready as an everyday keyboard utility.
+- Editable OpenPencil design draft on VPS: `keyboop-windows-settings-v2.fig` (not yet an accepted faithful reproduction of upstream UI).
 
-## Build
+## VPS development and verification
 
-Windows 10/11 + .NET 10 SDK:
+**GitHub is source control only**. No GitHub Actions CI is used. Our isolated Linux build workspace is:
+
+```
+/home/admin/experiments/keyboop-windows/
+├── repo/                  # source checkout
+├── toolchain/dotnet/      # local .NET SDK 10.0.403
+├── nuget/                 # isolated NuGet cache
+├── tmp/                   # avoids VPS tmpfs exhaustion
+└── artifacts/builds/      # immutable-by-commit build outputs
+```
+
+From the VPS repo checkout:
+
+```bash
+git fetch --depth=1 origin main && git reset --hard origin/main
+bash scripts/vps-build.sh
+```
+
+The script runs the .NET core smoke checks, cross-compiles the Windows WPF project and publishes a **self-contained win-x64** directory and ZIP. It writes a receipt including source revision, SDK and SHA-256. Local SDK version on initial setup: 10.0.403.
+
+A Linux cross-build does **not** verify a Windows keyboard hook or GUI behavior. Those require a real Windows test session.
+
+## Manual Windows build (optional)
 
 ```powershell
 dotnet build src/Keyboop.Windows/Keyboop.Windows.csproj -c Release
-dotnet run --project src/Keyboop.Windows/Keyboop.Windows.csproj
 dotnet run --project tests/Keyboop.Core.Smoke/Keyboop.Core.Smoke.csproj
 ```
 
-The CI builds on Windows, runs the conversion smoke checks and archives a build artifact. **The real keyboard hook has not yet been validated on an interactive Windows desktop.** Do not install this prototype as an everyday keyboard filter.
+## Safety / release blockers
 
-## Safety and next work
-
-- Exclude protected password fields using real UI Automation + secure input policy, avoid holding even volatile password chars.
-- Track caret movement, mouse events, window/thread focus and IME/dead keys; test Windows RDP, browsers, Office, IDEs.
-- Check `SendInput` return value and handle failed / partial injection without silent data loss.
-- Port Keyboop's language detector, dictionary assets and exception rules under preserved attribution.
-- Enable automatic correction **only** after system-level safety gates pass.
-- Record Win32 integration test results and editable design/visual QA.
+- Detect password and protected fields before recording even transient keys; ensure safe behavior with privilege boundaries.
+- Track cursor and mouse movement, focus, synthetic input and `SendInput` partial failures.
+- Verify on Windows in browsers, IDEs, Office, terminals, UAC and remote sessions.
+- Port original Keyboop language detection and dictionaries, retaining license attribution.
+- Only then consider automatic correction.
 
 ## Attribution
 
-Original Keyboop © Ivan Smetanin (MIT), https://github.com/iffuno/keyboop. Third-party dictionaries are **not** redistributed in the current first prototype.
+Original Keyboop © Ivan Smetanin (MIT), https://github.com/iffuno/keyboop. Upstream third-party dictionary assets are not redistributed in this prototype.
